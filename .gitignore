@@ -1,0 +1,24 @@
+# Secrets — never commit real keys
+.env
+.env.local
+.env.*.local
+
+# Local data produced by workflow 03 (keep directory structure only)
+data/incoming/*
+!data/incoming/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+*.log
+
+# Optional local artifacts
+*.docx
+n8n_data/
+ollama_data/
