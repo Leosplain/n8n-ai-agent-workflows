@@ -1,0 +1,160 @@
+{
+  "name": "Scenario 1 - RSS AI Digest to Telegram",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "node-trigger-schedule",
+      "name": "Daily Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://news.ycombinator.com/rss",
+        "options": {}
+      },
+      "id": "node-rss-read",
+      "name": "Fetch Tech RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.1,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst lines = items.slice(0, 15).map((item, i) => {\n  const j = item.json;\n  return `${i + 1}. ${j.title || ''}\\n   ${j.link || ''}\\n   ${(j.contentSnippet || j.content || '').toString().slice(0, 200)}`;\n});\nreturn [{ json: { feed_summary: lines.join('\\n\\n') } }];"
+      },
+      "id": "node-aggregate-rss",
+      "name": "Aggregate Top Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "id": "node-openai-model",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [860, 480],
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_WITH_YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=你是科技動態分析助理。閱讀以下 RSS 條目清單，挑出與「生成式 AI」或「工作流程自動化」最相關的最多 3 則。\n\n規則：\n1. 每則用繁體中文寫 2 句以內重點。\n2. 不要問候語，直接條列。\n3. 格式固定：\n   - 【主題】：\n   - 【重點摘要】：\n   - 【原文來源】：（保留 URL）\n4. 全程繁體中文，禁止簡體字。\n\n輸入清單：\n{{ $json.feed_summary }}",
+        "options": {}
+      },
+      "id": "node-ai-agent",
+      "name": "AI Digest Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.6,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.output }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "node-telegram-send",
+      "name": "Send Telegram Update",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1100, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Schedule": {
+      "main": [
+        [
+          {
+            "node": "Fetch Tech RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Tech RSS": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Top Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Top Items": {
+      "main": [
+        [
+          {
+            "node": "AI Digest Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Digest Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Digest Agent": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

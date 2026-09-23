@@ -1,0 +1,168 @@
+{
+  "name": "Scenario 3 - Local Ollama Zero-Cost Privacy Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerOn": "folder",
+        "path": "/data/incoming",
+        "events": ["add"],
+        "options": {
+          "depth": 0
+        }
+      },
+      "id": "node-local-file-trigger",
+      "name": "Local Directory Watcher",
+      "type": "n8n-nodes-base.localFileTrigger",
+      "typeVersion": 1,
+      "position": [180, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "={{ $json.path }}",
+        "options": {}
+      },
+      "id": "node-read-file",
+      "name": "Read File from Disk",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "options": {},
+        "binaryPropertyName": "data"
+      },
+      "id": "node-extract-text",
+      "name": "Extract Text from File",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [620, 300]
+    },
+    {
+      "parameters": {
+        "model": "gemma2:2b",
+        "options": {
+          "baseURL": "http://ollama:11434"
+        }
+      },
+      "id": "node-ollama-model",
+      "name": "Ollama Local Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [840, 480]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=請對以下本地檔案文字內容進行安全歸檔摘要（全程繁體中文）：\n\n{{ $json.data || $json.text || $json.content || JSON.stringify($json) }}\n\n規範：\n1. 提取核心數據與結論，2～5 點條列。\n2. 完全於內網環境完成，不傳輸至任何外部 API。\n3. 不要輸出多餘問候語。",
+        "options": {}
+      },
+      "id": "node-privacy-agent",
+      "name": "Local Privacy Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.6,
+      "position": [840, 300]
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "output",
+        "options": {
+          "fileName": "={{ 'summary-' + $now.toFormat('yyyyLLdd-HHmmss') + '.txt' }}"
+        }
+      },
+      "id": "node-convert-to-file",
+      "name": "Convert Summary to File",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [1060, 300]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/data/processed/{{ $binary.data.fileName || ('summary-' + $now.toFormat('yyyyLLdd-HHmmss') + '.txt') }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "node-write-file",
+      "name": "Write Local Archive",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [1280, 300]
+    }
+  ],
+  "connections": {
+    "Local Directory Watcher": {
+      "main": [
+        [
+          {
+            "node": "Read File from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read File from Disk": {
+      "main": [
+        [
+          {
+            "node": "Extract Text from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Text from File": {
+      "main": [
+        [
+          {
+            "node": "Local Privacy Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Local Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Local Privacy Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Local Privacy Agent": {
+      "main": [
+        [
+          {
+            "node": "Convert Summary to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert Summary to File": {
+      "main": [
+        [
+          {
+            "node": "Write Local Archive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

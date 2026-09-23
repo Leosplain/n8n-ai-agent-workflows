@@ -1,0 +1,47 @@
+version: "3.8"
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: n8n-automation
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=Asia/Taipei
+      - TZ=Asia/Taipei
+      # Optional: set a strong encryption key for credentials
+      # - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      # Shared data dirs for Local File Trigger / Read-Write (workflow 03)
+      - ./data:/data
+    networks:
+      - n8n-net
+    # Uncomment if you run Ollama on the host instead of the ollama service:
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: n8n-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - n8n-net
+
+networks:
+  n8n-net:
+    driver: bridge
+
+volumes:
+  n8n_data:
+  ollama_data:

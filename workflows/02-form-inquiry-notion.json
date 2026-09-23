@@ -1,0 +1,159 @@
+{
+  "name": "Scenario 2 - Inquiry Structured Extraction to Notion",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "inquiry-form",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "node-webhook-inquiry",
+      "name": "Form Submission Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "inquiry-form-webhook"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "id": "node-openai-model",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [440, 480],
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_WITH_YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=你是商務專案助理。閱讀客戶諮詢文字，只輸出合法 JSON（不要 markdown 程式碼區塊、不要其他說明）：\n{\n  \"client_name\": \"姓名或公司，未知則待確認\",\n  \"inquiry_category\": \"技術諮詢|合作邀約|報價需求|其他\",\n  \"core_problem\": \"40字以內大白話\",\n  \"urgency_level\": \"高|中|低\"\n}\n\n諮詢原文：\n{{ $json.body.message || $json.body || $json.message || JSON.stringify($json) }}",
+        "hasOutputParser": false,
+        "options": {}
+      },
+      "id": "node-ai-extraction",
+      "name": "AI Structuring Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.6,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.output || $json.text || '';\nlet cleaned = String(raw).trim();\n// strip common markdown code fences\ncleaned = cleaned.replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/i, '').trim();\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  // fallback: try to extract first {...}\n  const m = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (m) {\n    parsed = JSON.parse(m[0]);\n  } else {\n    throw new Error('AI output is not valid JSON: ' + cleaned.slice(0, 300));\n  }\n}\nreturn [{\n  json: {\n    client_name: parsed.client_name || '待確認',\n    inquiry_category: parsed.inquiry_category || '其他',\n    core_problem: parsed.core_problem || '',\n    urgency_level: parsed.urgency_level || '中',\n    raw_output: cleaned\n  }\n}];"
+      },
+      "id": "node-parse-json",
+      "name": "Parse AI JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "create",
+        "databaseId": {
+          "__rl": true,
+          "value": "={{ $env.NOTION_DATABASE_ID }}",
+          "mode": "id"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Name|title",
+              "title": "={{ $json.client_name }}"
+            },
+            {
+              "key": "Summary|rich_text",
+              "textContent": "={{ $json.core_problem }}"
+            },
+            {
+              "key": "Category|select",
+              "selectValue": "={{ $json.inquiry_category }}"
+            },
+            {
+              "key": "Urgency|select",
+              "selectValue": "={{ $json.urgency_level }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-notion-append",
+      "name": "Append to Notion DB",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [900, 300],
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_WITH_YOUR_NOTION_CREDENTIAL_ID",
+          "name": "Notion account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Form Submission Webhook": {
+      "main": [
+        [
+          {
+            "node": "AI Structuring Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Structuring Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Structuring Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse AI JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI JSON": {
+      "main": [
+        [
+          {
+            "node": "Append to Notion DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
